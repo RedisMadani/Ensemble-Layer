@@ -1,0 +1,59 @@
+---
+- name: Install PowerDNS and MySQL
+  apt:
+    name: "{{ item }}"
+    state: present
+  loop:
+    - pdns-server
+    - pdns-backend-mysql
+    - mysql-server
+
+- name: Configure MySQL for PowerDNS
+  mysql_db:
+    name: powerdns
+    state: present
+
+- name: Create MySQL user for PowerDNS
+  mysql_user:
+    name: powerdns
+    password: pdnspass
+    priv: "powerdns.*:ALL"
+    state: present
+
+- name: Download and import PowerDNS schema
+  get_url:
+    url: https://raw.githubusercontent.com/PowerDNS/pdns/master/modules/gmysqlbackend/schema.mysql.sql
+    dest: /tmp/schema.mysql.sql
+
+- name: Import PowerDNS schema into MySQL
+  mysql_db:
+    name: powerdns
+    state: import
+    target: /tmp/schema.mysql.sql
+
+- name: Configure PowerDNS
+  template:
+    src: pdns.conf.j2
+    dest: /etc/powerdns/pdns.conf
+
+- name: Restart and enable PowerDNS service
+  systemd:
+    name: pdns
+    state: restarted
+    enabled: true
+
+- name: Add DNS records
+  mysql_db:
+    name: powerdns
+    state: query
+    sql: |
+      INSERT INTO domains (name, type) VALUES ('{{ DOMAIN }}', 'NATIVE');
+      INSERT INTO records (domain_id, name, type, content, ttl, prio) VALUES ((SELECT id FROM domains WHERE name='{{ DOMAIN }}'), '{{ DOMAIN }}', 'SOA', 'ns1.{{ DOMAIN }} hostmaster.{{ DOMAIN }} 1 3600 1200 604800 3600', 86400, NULL);
+      INSERT INTO records (domain_id, name, type, content, ttl, prio) VALUES ((SELECT id FROM domains WHERE name='{{ DOMAIN }}'), '{{ DOMAIN }}', 'NS', 'ns1.{{ DOMAIN }}', 86400, NULL);
+      INSERT INTO records (domain_id, name, type, content, ttl, prio) VALUES ((SELECT id FROM domains WHERE name='{{ DOMAIN }}'), '{{ DOMAIN }}', 'MX', '{{ MAIL_SERVER }}', 86400, 10);
+      INSERT INTO records (domain_id, name, type, content, ttl, prio) VALUES ((SELECT id FROM domains WHERE name='{{ DOMAIN }}'), '{{ MAIL_SERVER }}', 'A', '{{ MAIL_SERVER_IP }}', 86400, NULL);
+      INSERT INTO records (domain_id, name, type, content, ttl, prio) VALUES ((SELECT id FROM domains WHERE name='connect.{{ DOMAIN }}'), 'connect.{{ DOMAIN }}', 'A', '{{ MAIL_SERVER_IP }}', 86400, NULL);
+      INSERT INTO records (domain_id, name, type, content, ttl, prio) VALUES ((SELECT id FROM domains WHERE name='vpn.{{ DOMAIN }}'), 'vpn.{{ DOMAIN }}', 'A', '{{ MAIL_SERVER_IP }}', 86400, NULL);
+      INSERT INTO records (domain_id, name, type, content, ttl, prio) VALUES ((SELECT id FROM domains WHERE name='conductor.orchestra.private'), 'conductor.orchestra.private', 'A', '{{ MAIL_SERVER_IP }}', 86400, NULL);
+      INSERT INTO records (domain_id, name, type, content, ttl, prio) VALUES ((SELECT id FROM domains WHERE name='netbird.{{ DOMAIN }}'), 'netbird.{{ DOMAIN }}', 'A', '{{ MAIL_SERVER_IP }}', 86400, NULL);
+      INSERT INTO records (domain_id, name, type, content, ttl, prio) VALUES ((SELECT id FROM domains WHERE name='keycloak.{{ DOMAIN }}'), 'keycloak.{{ DOMAIN }}', 'A', '{{ MAIL_SERVER_IP }}', 86400, NULL);

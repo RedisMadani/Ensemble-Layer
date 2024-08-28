@@ -1,0 +1,18 @@
+---
+- name: Add Netbird APT repository and install Netbird
+  apt_key:
+    url: "{{ NETBIRD_REPO }}"
+    state: present
+
+- name: Add Netbird repository
+  apt_repository:
+    repo: "deb https://packages.netbird.io/debian/ netbird main"
+    state: present
+
+- name: Install Netbird
+  apt:
+    name: netbird
+    state: present
+
+- name: Start Netbird service with setup key
+  command: netbird up --setup-key YOUR_SETUP_KEY

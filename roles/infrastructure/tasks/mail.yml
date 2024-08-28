@@ -1,0 +1,67 @@
+---
+- name: Install mail server packages
+  apt:
+    name: "{{ item }}"
+    state: present
+  loop:
+    - postfix
+    - dovecot-core
+    - dovecot-imapd
+    - dovecot-pop3d
+    - opendkim
+    - opendkim-tools
+    - certbot
+
+- name: Configure Postfix
+  template:
+    src: main.cf.j2
+    dest: /etc/postfix/main.cf
+
+- name: Configure Dovecot
+  template:
+    src: dovecot.conf.j2
+    dest: /etc/dovecot/dovecot.conf
+
+- name: Restart Postfix and Dovecot
+  systemd:
+    name: "{{ item }}"
+    state: restarted
+  loop:
+    - postfix
+    - dovecot
+
+- name: Generate DKIM keys
+  command: opendkim-genkey -s {{ DKIM_SELECTOR }} -d {{ DOMAIN }}
+
+- name: Move DKIM private key
+  command: mv {{ DKIM_SELECTOR }}.private /etc/opendkim/keys/{{ DOMAIN }}.private
+
+- name: Set permissions on DKIM key
+  file:
+    path: /etc/opendkim/keys/{{ DOMAIN }}.private
+    owner: opendkim
+    group: opendkim
+    mode: '0600'
+
+- name: Configure OpenDKIM
+  template:
+    src: opendkim.conf.j2
+    dest: /etc/opendkim.conf
+
+- name: Configure OpenDKIM default settings
+  template:
+    src: opendkim.default.j2
+    dest: /etc/default/opendkim
+
+- name: Restart OpenDKIM
+  systemd:
+    name: opendkim
+    state: restarted
+
+- name: Obtain SSL certificates using Let's Encrypt
+  command: certbot certonly --standalone -d {{ MAIL_SERVER }}
+
+- name: Restart Postfix
+  systemd:
+    name: postfix
+    state: restarted

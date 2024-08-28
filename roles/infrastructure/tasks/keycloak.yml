@@ -1,0 +1,33 @@
+---
+- name: Install Java
+  apt:
+    name: default-jdk
+    state: present
+
+- name: Download and install Keycloak
+  get_url:
+    url: "https://github.com/keycloak/keycloak/releases/download/{{ KEYCLOAK_VERSION }}/keycloak-{{ KEYCLOAK_VERSION }}.tar.gz"
+    dest: /tmp/keycloak.tar.gz
+
+- name: Extract Keycloak
+  unarchive:
+    src: /tmp/keycloak.tar.gz
+    dest: /opt
+    remote_src: true
+
+- name: Rename Keycloak folder
+  command: mv /opt/keycloak-{{ KEYCLOAK_VERSION }} /opt/keycloak
+
+- name: Configure Keycloak service
+  template:
+    src: keycloak.service.j2
+    dest: /etc/systemd/system/keycloak.service
+
+- name: Reload systemd
+  command: systemctl daemon-reload
+
+- name: Enable and start Keycloak service
+  systemd:
+    name: keycloak
+    state: started
+    enabled: true
